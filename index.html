@@ -328,7 +328,7 @@ button:focus-visible{outline:4px solid var(--sun);outline-offset:3px}
       <button class="pill" data-mimi="1" id="mimiOn">På</button>
       <button class="pill" data-mimi="0" id="mimiOff">Av</button>
     </div>
-    <p><b>Bättre röst:</b> iPadens förinstallerade röster är de enklaste. Gå till Inställningar, Hjälpmedel, Uppläst innehåll, Röster, Franska (Frankrike) och ladda ner till exempel <b>Audrey</b>, <b>Thomas</b> eller <b>Aurélie</b> i versionen <i>Förbättrad</i> eller <i>Premium</i>. Gör gärna samma sak för svenska (Alva eller Klara). Stäng och öppna spelet igen, så väljs den bästa rösten automatiskt. Du kan också välja röst ovan och trycka Lyssna.</p>
+    <p><b>Bättre röst:</b> Safari låter oftast bara spelet se iPadens skämtröster (Flo, Eddy, Grandma med flera). Välj därför <b>iPadens standardröst</b> ovan. Bestäm sedan vilken röst det ska vara i Inställningar, Hjälpmedel, Uppläst innehåll, Röster, Franska: ladda ner till exempel <b>Audrey (Förbättrad)</b> och tryck på den så att den får en bock. Gör samma sak under Svenska (till exempel Alva). Stäng spelet helt och öppna det igen, och tryck Lyssna för att prova.</p>
     <p>Hör du inget? Kontrollera att iPaden inte står på ljudlöst (knappen eller Kontrollcenter).</p>
 
     <h3>Lägg spelet på hemskärmen</h3>
@@ -428,8 +428,11 @@ function voicesFor(k){
 function pickVoices(){
   if(!synth) return;
   ['fr', 'sv'].forEach(function(k){
+    /* Safari visar ofta bara skämtrösterna (Flo, Eddy, Grandma...). Då är det bättre att inte välja någon alls,
+       så använder iPaden sin egen standardröst för språket, den som är vald under Uppläst innehåll. */
     var list = voicesFor(k), want = settings['voice' + k];
-    V[k] = (want && list.find(function(v){ return v.voiceURI === want; })) || list[0] || null;
+    var ok = list.filter(function(v){ return vScore(v, k) > -40; });
+    V[k] = want ? (list.find(function(v){ return v.voiceURI === want; }) || ok[0] || null) : (want === '' ? null : ok[0] || null);
   });
   voiceInfo();
 }
@@ -460,14 +463,14 @@ var VOICES = {
 function voiceInfo(){
   var el = $('#voiceInfo'); if(!el) return;
   if(!synth){ el.textContent = 'Den här webbläsaren kan inte läsa upp text. Öppna spelet i Safari på iPaden.'; return; }
-  el.textContent = (V.fr ? 'Fransk röst: ' + V.fr.name + '. ' : 'Ingen fransk röst hittades ännu, iPaden försöker ändå med franska. ') +
-    (V.sv ? 'Svensk röst för Mimi: ' + V.sv.name + '.' : 'Ingen svensk röst hittades; Mimis text visas i rutan nere till vänster.');
+  el.textContent = 'Fransk röst: ' + (V.fr ? V.fr.name : 'iPadens standardröst för franska') + '. Svensk röst: ' + (V.sv ? V.sv.name : 'iPadens standardröst för svenska') + '.';
   ['fr', 'sv'].forEach(function(k){
     var sel = $('#voiceSel' + k); if(!sel) return;
     var list = voicesFor(k);
     sel.innerHTML = '';
+    var d = document.createElement('option'); d.value = ''; d.textContent = 'iPadens standardröst'; if(!V[k]) d.selected = true; sel.appendChild(d);
     list.forEach(function(v){ var o = document.createElement('option'); o.value = v.voiceURI; o.textContent = v.name + ' (' + v.lang + ')'; if(V[k] && v.voiceURI === V[k].voiceURI) o.selected = true; sel.appendChild(o); });
-    sel.disabled = !list.length;
+    
   });
 }
 function tryVoice(k){

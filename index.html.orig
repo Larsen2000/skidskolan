@@ -176,6 +176,7 @@ button:focus-visible{outline:4px solid var(--sun);outline-offset:3px}
 #adult p{margin:6px 0;max-width:65ch}
 #adult .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:8px 0}
 #adult .pill{border:1.5px solid var(--ice);background:var(--frost);border-radius:999px;padding:8px 14px;font:700 15px/1 var(--body);cursor:pointer;color:var(--ink)}
+#adult .vsel{flex:1;min-width:0;max-width:260px;border:1.5px solid var(--ice);background:var(--frost);border-radius:12px;padding:8px 10px;font:600 15px/1.2 var(--body);color:var(--ink)}
 #adult .pill[aria-pressed="true"]{background:var(--ink);color:var(--snow);border-color:var(--ink)}
 #adult table{border-collapse:collapse;width:100%;font-size:15px}
 #adult td{border-top:1px solid var(--ice);padding:6px 8px 6px 0;vertical-align:top}
@@ -311,6 +312,14 @@ button:focus-visible{outline:4px solid var(--sun);outline-offset:3px}
 
     <h3>Ljud</h3>
     <div class="note" id="voiceInfo">Kollar rösterna…</div>
+    <div class="row"><span>Fransk röst:</span>
+      <select class="vsel" id="voiceSelfr" aria-label="Fransk röst"></select>
+      <button class="pill" id="tryfr">Lyssna</button>
+    </div>
+    <div class="row"><span>Svensk röst:</span>
+      <select class="vsel" id="voiceSelsv" aria-label="Svensk röst"></select>
+      <button class="pill" id="trysv">Lyssna</button>
+    </div>
     <div class="row"><span>Tempo:</span>
       <button class="pill" data-rate="0.8" id="rateSlow">Långsamt</button>
       <button class="pill" data-rate="1" id="rateNorm">Normalt</button>
@@ -319,7 +328,8 @@ button:focus-visible{outline:4px solid var(--sun);outline-offset:3px}
       <button class="pill" data-mimi="1" id="mimiOn">På</button>
       <button class="pill" data-mimi="0" id="mimiOff">Av</button>
     </div>
-    <p>Hör du inget? Kontrollera att iPaden inte står på ljudlöst (knappen eller Kontrollcenter). Finns ingen fransk röst: Inställningar, Hjälpmedel, Uppläst innehåll, Röster, Franska, ladda ner till exempel Amélie eller Thomas.</p>
+    <p><b>Bättre röst:</b> iPadens förinstallerade röster är de enklaste. Gå till Inställningar, Hjälpmedel, Uppläst innehåll, Röster, Franska (Frankrike) och ladda ner till exempel <b>Audrey</b>, <b>Thomas</b> eller <b>Aurélie</b> i versionen <i>Förbättrad</i> eller <i>Premium</i>. Gör gärna samma sak för svenska (Alva eller Klara). Stäng och öppna spelet igen, så väljs den bästa rösten automatiskt. Du kan också välja röst ovan och trycka Lyssna.</p>
+    <p>Hör du inget? Kontrollera att iPaden inte står på ljudlöst (knappen eller Kontrollcenter).</p>
 
     <h3>Lägg spelet på hemskärmen</h3>
     <p>Öppna spelet i Safari, tryck på Dela-knappen (rutan med pilen uppåt) och välj <b>Lägg till på hemskärmen</b>. Då får Johannes en egen ikon att trycka på.</p>
@@ -396,13 +406,31 @@ var sfx = {
 /* ---------- speech ---------- */
 var synth = window.speechSynthesis || null;
 var V = {fr:null, sv:null};
+var NOVELTY = /eddy|flo\b|grandma|grandpa|jacques|reed|rocko|sandy|shelley|bad news|bahh|bells|boing|bubbles|cellos|good news|jester|organ|superstar|trinoids|whisper|wobble|zarvox|albert|fred|junior|ralph|kathy/i;
+var GOOD = {fr:/audrey|aur[ée]lie|marie|thomas|am[ée]lie|daniel|virginie|julie|chantal|nicolas/i, sv:/alva|klara|oskar|astrid/i};
+function vScore(v, k){
+  var n = (v.name || '') + ' ' + (v.voiceURI || ''), sc = 0;
+  if(/premium/i.test(n)) sc += 60; else if(/enhanced|förbättrad|förbättrat|siri|neural|natural/i.test(n)) sc += 40;
+  if(GOOD[k].test(v.name || '')) sc += 15;
+  if(/compact/i.test(n)) sc -= 5;
+  if(/eloquence/i.test(n) || NOVELTY.test(v.name || '')) sc -= 80;
+  if(k === 'fr' && /^fr[-_]FR/i.test(v.lang)) sc += 10;
+  if(k === 'sv' && /^sv[-_]SE/i.test(v.lang)) sc += 10;
+  if(v.localService) sc += 2;
+  return sc;
+}
+function voicesFor(k){
+  if(!synth) return [];
+  var re = k === 'fr' ? /^fr/i : /^sv/i;
+  return (synth.getVoices() || []).filter(function(v){ return re.test(v.lang); })
+    .sort(function(a, b){ return vScore(b, k) - vScore(a, k); });
+}
 function pickVoices(){
   if(!synth) return;
-  var vs = synth.getVoices() || [];
-  function best(re){ var c = vs.filter(function(v){ return re.test(v.lang); });
-    return c.find(function(v){ return /enhanced|premium|förbättrad/i.test(v.name); }) || c.find(function(v){ return v.localService; }) || c[0] || null; }
-  V.fr = best(/^fr[-_]FR/i) || best(/^fr/i);
-  V.sv = best(/^sv/i);
+  ['fr', 'sv'].forEach(function(k){
+    var list = voicesFor(k), want = settings['voice' + k];
+    V[k] = (want && list.find(function(v){ return v.voiceURI === want; })) || list[0] || null;
+  });
   voiceInfo();
 }
 if(synth){ pickVoices(); if('onvoiceschanged' in synth) synth.addEventListener('voiceschanged', pickVoices); }
@@ -415,7 +443,9 @@ function speak(text, lang, pitch, rate){
     if(!synth || typeof SpeechSynthesisUtterance === 'undefined'){ setTimeout(res, est * .7); return; }
     var u = new SpeechSynthesisUtterance(text), done = false, t;
     u.lang = lang; var v = lang.indexOf('fr') === 0 ? V.fr : V.sv; if(v) u.voice = v;
-    u.rate = r; u.pitch = pitch || 1;
+    u.rate = r; u.volume = 1;
+    /* iPadens röster blir grötiga när tonhöjden ändras mycket, så karaktärerna får bara en liten färgning */
+    u.pitch = Math.max(.95, Math.min(1.2, 1 + ((pitch || 1) - 1) * .25));
     function fin(){ if(done) return; done = true; clearTimeout(t); keep.splice(keep.indexOf(u), 1); res(); }
     u.onend = fin; u.onerror = fin;
     t = setTimeout(fin, est + 2500);
@@ -432,6 +462,18 @@ function voiceInfo(){
   if(!synth){ el.textContent = 'Den här webbläsaren kan inte läsa upp text. Öppna spelet i Safari på iPaden.'; return; }
   el.textContent = (V.fr ? 'Fransk röst: ' + V.fr.name + '. ' : 'Ingen fransk röst hittades ännu, iPaden försöker ändå med franska. ') +
     (V.sv ? 'Svensk röst för Mimi: ' + V.sv.name + '.' : 'Ingen svensk röst hittades; Mimis text visas i rutan nere till vänster.');
+  ['fr', 'sv'].forEach(function(k){
+    var sel = $('#voiceSel' + k); if(!sel) return;
+    var list = voicesFor(k);
+    sel.innerHTML = '';
+    list.forEach(function(v){ var o = document.createElement('option'); o.value = v.voiceURI; o.textContent = v.name + ' (' + v.lang + ')'; if(V[k] && v.voiceURI === V[k].voiceURI) o.selected = true; sel.appendChild(o); });
+    sel.disabled = !list.length;
+  });
+}
+function tryVoice(k){
+  hush();
+  if(k === 'fr') speak('Bonjour ! Je m\u2019appelle Camille. On y va ?', 'fr-FR', 1, .9);
+  else speak('Hej! Jag är Mimi.', 'sv-SE', 1.25, 1);
 }
 
 /* ---------- small helpers ---------- */
@@ -2516,6 +2558,11 @@ function syncPills(){
 $('#adultBtn').addEventListener('click', function(){ voiceInfo(); syncPills(); stTable(); $('#resetMsg').textContent = ''; adult.hidden = false; });
 $('#adultClose').addEventListener('click', function(){ adult.hidden = true; });
 adult.addEventListener('click', function(e){ if(e.target === adult) adult.hidden = true; });
+['fr', 'sv'].forEach(function(k){
+  var sel = $('#voiceSel' + k), b = $('#try' + k);
+  if(sel) sel.addEventListener('change', function(){ settings['voice' + k] = sel.value; save('skidspel-settings', settings); pickVoices(); tryVoice(k); });
+  if(b) b.addEventListener('click', function(){ tryVoice(k); });
+});
 document.querySelectorAll('[data-rate]').forEach(function(b){ b.addEventListener('click', function(){ settings.rate = +b.dataset.rate; save('skidspel-settings', settings); syncPills(); speak('Bonjour !', 'fr-FR', 1.12, .82); }); });
 document.querySelectorAll('[data-mimi]').forEach(function(b){ b.addEventListener('click', function(){ settings.mimi = b.dataset.mimi === '1'; save('skidspel-settings', settings); syncPills(); }); });
 document.querySelectorAll('[data-unlock]').forEach(function(b){ b.addEventListener('click', function(){ settings.unlockAll = b.dataset.unlock === '1'; save('skidspel-settings', settings); syncPills(); stTable(); }); });
